@@ -14,6 +14,7 @@ import org.springframework.security.oauth2.common.util.JsonParser;
 import org.springframework.security.oauth2.common.util.JsonParserFactory;
 import org.springframework.security.oauth2.provider.OAuth2Authentication;
 import org.springframework.security.oauth2.provider.TokenRequest;
+import org.springframework.security.oauth2.provider.token.store.InMemoryTokenStore;
 import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
 import org.springframework.security.oauth2.provider.token.store.JwtTokenStore;
 
@@ -24,12 +25,13 @@ import org.springframework.security.oauth2.provider.token.store.JwtTokenStore;
  */
 public class DefaultTokenServicesWithJwtTests extends AbstractDefaultTokenServicesTests {
 
-	private JwtTokenStore tokenStore;
-	JwtAccessTokenConverter enhancer = new JwtAccessTokenConverter();
+	private TokenStore tokenStore;
+
+	private JwtAccessTokenConverter enhancer = new JwtAccessTokenConverter();
 
 	@Override
 	protected TokenStore createTokenStore() {
-		tokenStore = new JwtTokenStore(enhancer);
+		tokenStore = new InMemoryTokenStore();
 		return tokenStore;
 	}
 
@@ -37,6 +39,7 @@ public class DefaultTokenServicesWithJwtTests extends AbstractDefaultTokenServic
 	protected void configureTokenServices(DefaultTokenServices services) throws Exception {
 		enhancer.afterPropertiesSet();
 		services.setTokenEnhancer(enhancer);
+		services.setReuseRefreshToken(false);
 		super.configureTokenServices(services);
 	}
 
@@ -82,6 +85,21 @@ public class DefaultTokenServicesWithJwtTests extends AbstractDefaultTokenServic
 		assertEquals("Access token ID does not match refresh token ATI",
 				accessTokenInfo.get(AccessTokenConverter.JTI),
 				refreshTokenInfo.get(AccessTokenConverter.ATI));
+	}
+
+	@Test
+	public void testRefreshTokenSameAsPersisted() throws Exception {
+		OAuth2Authentication authentication = createAuthentication();
+		OAuth2AccessToken initialToken = getTokenServices().createAccessToken(authentication);
+		TokenRequest tokenRequest = new TokenRequest(Collections.singletonMap(
+				"client_id", "id"), "id", null, null);
+		OAuth2AccessToken refreshedAccessToken = getTokenServices().refreshAccessToken(
+				initialToken.getRefreshToken().getValue(), tokenRequest);
+		OAuth2AccessToken persistedRefreshedToken = getTokenStore().readAccessToken(
+				refreshedAccessToken.getValue());
+		assertEquals("Persisted refreshToken does not match",
+				refreshedAccessToken.getRefreshToken().getValue(),
+				persistedRefreshedToken.getRefreshToken().getValue());
 	}
 
 }
